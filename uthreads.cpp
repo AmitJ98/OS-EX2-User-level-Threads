@@ -1,12 +1,14 @@
 #include "uthreads.h"
-
+#define READY 0
+#define RUNNING 1
+#define BLOCKED 2
 
 static std::list<thread*> ready_queue;
 static std::list<thread*> all_threads;
 static std::list<bool> available_id(MAX_THREAD_NUM, false);
 
 static thread* running_thread = nullptr;
-static int total_quantum;
+static int total_quantum = 0;
 static int interval;
 
 static struct sigaction sa;
@@ -14,7 +16,49 @@ static struct itimerval timer;
 static sigset_t set;
 
 
-void switch_thread(int x);
+
+void switch_threads()
+{
+  total_quantum++;
+  running_thread->increace_quantum_counter();
+  ready_queue.pop_front();
+  ready_queue.push_back (running_thread);
+  running_thread->set_state (READY);
+
+  thread* next = ready_queue.front();
+  next->set_state (RUNNING);
+
+  if ((sigsetjmp(running_thread->_env,1)) == 0 )
+  {
+    running_thread = next;
+    siglongjmp(running_thread->_env,1);
+  }
+
+}
+
+
+void block_running_thread()
+{
+  switch_threads();
+  thread* thread_to_block = ready_queue.back();
+  thread_to_block->set_state (BLOCKED);
+  ready_queue.pop_back();
+
+}
+
+
+void terminate_running(){
+
+}
+
+
+void time_handler(int sig)
+{
+  total_quantum++;
+  running_thread->increace_quantum_counter();
+  switch_threads();
+}
+
 
 //true = unblock , false = block
 int block_open(bool op)
@@ -132,7 +176,7 @@ int uthread_init(int quantum_usecs){
     /////////////////////////////// need to print something////////////////////////////
   }
 
-  sa.sa_handler = &switch_thread;
+  sa.sa_handler = &time_handler;
   if (sigaction(SIGVTALRM, &sa, nullptr) < 0) {
     /////////////////////////////// need to print something////////////////////////////
     return -1;
@@ -148,7 +192,6 @@ int uthread_init(int quantum_usecs){
 
   set_id_value(0,true);
   thread *main_thread = new thread(0, nullptr);
-  all_threads.push_back (main_thread);
   main_thread->set_state (0);
   running_thread = main_thread;
   return 0;
@@ -239,8 +282,12 @@ int uthread_terminate(int tid)
     }
     _exit (0);
   }
+  else if (running_thread->get_id() == tid)
+  {
+    //todo when thread running terminated need to call switch_thread
+  }
   else
-  { //todo when thread running terminated need to call switch_thread
+  {
     thread* thead_to_delete = search_thread (tid);
     int thread_to_delete_id = thead_to_delete->get_id();
     set_id_value (thread_to_delete_id, false);
@@ -280,20 +327,44 @@ int uthread_terminate(int tid)
 */
 int uthread_block(int tid)
 {
-  int exist = check_if_thread_exist (tid);
-  if (exist == -1)
+  int block_res = block_open (false);
+  if (block_res == -1)
+  {
+    /////////////////////////////////////
+    return -1;
+  }
+
+  if (check_if_thread_exist (tid) == -1)
   {
     ///////////////////////////////////////
     return -1;
   }
 
+  thread* thread_to_block = search_thread (tid);
+  if (thread_to_block == running_thread)
+  {
+    block_running_thread();
+  }
+
+  else if(thread_to_block->get_state() == READY)
+  {
+    int delete_from_ready = delete_thread_from_ready_queue (tid);
+    if (delete_from_ready == -1)
+    {
+      return -1;
+    }
+    thread_to_block->set_state (BLOCKED);
+  }
+
+  block_res = block_open (true);
+  if (block_res == -1)
+  {
+    /////////////////////////////////////
+    return -1;
+  }
+  return 0;
 
 }
-
-
-
-
-
 
 
 /**
@@ -304,7 +375,38 @@ int uthread_block(int tid)
  *
  * @return On success, return 0. On failure, return -1.
 */
-int uthread_resume(int tid);
+int uthread_resume(int tid)
+{
+  int block_res = block_open (false);
+  if (block_res == -1)
+  {
+    /////////////////////////////////////
+    return -1;
+  }
+
+  if (check_if_thread_exist (tid) == -1)
+  {
+    ///////////////////////////////////////
+    return -1;
+  }
+  thread* thread_to_resume = search_thread (tid);
+  if(thread_to_resume->get_state() == BLOCKED)
+  {
+    thread_to_resume->set_state (READY);
+    ready_queue.push_back (thread_to_resume);
+  }
+
+  block_res = block_open (true);
+  if (block_res == -1)
+  {
+    /////////////////////////////////////
+    return -1;
+  }
+  return 0;
+
+}
+
+
 
 
 /**

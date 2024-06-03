@@ -20,11 +20,11 @@ class thread
     address_t _pc;
     char *_stack;
     void (*_f)();
-    sigjmp_buf _env;
 
 
 
  public:
+    sigjmp_buf _env;
     thread(int id , void (*f)(void) );
     ~thread();
 
@@ -35,6 +35,7 @@ class thread
 
 
     void set_state(int change_to);
+    void increace_quantum_counter();
 };
 
 #endif //_THREAD_H_

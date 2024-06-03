@@ -85,7 +85,13 @@ int thread::get_quantum_counter () const
   return _quantum_counter;
 }
 
+
 void thread::set_state (int change_to)
 {
   _state = change_to;
+}
+
+void thread::increace_quantum_counter ()
+{
+  _quantum_counter++;
 }
