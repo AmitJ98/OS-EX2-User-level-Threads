@@ -55,10 +55,10 @@ thread::thread (int id , thread_entry_point f)
   _quantum_counter = 0;
   _f = f;
   _stack = new char[STACK_SIZE];
-  _sp = (address_t) stack + STACK_SIZE - sizeof(address_t);
+  _sp = (address_t) _stack + STACK_SIZE - sizeof(address_t);
   _pc = (address_t)f;
 
-  sigsetjmp(env, 1);
+  sigsetjmp(_env, 1);
   (_env->__jmpbuf)[JB_SP] = translate_address(_sp);
   (_env->__jmpbuf)[JB_PC] = translate_address(_pc);
   sigemptyset(&_env->__saved_mask);

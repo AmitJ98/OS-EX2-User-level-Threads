@@ -8,9 +8,10 @@
 
 #include "thread.h"
 #include "queue"
-#include "set"
+#include "list"
 #include <stdio.h>
 #include <signal.h>
+#include "algorithm"
 
 
 

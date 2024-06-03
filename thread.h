@@ -3,6 +3,7 @@
 
 #include <setjmp.h>
 #include <sys/time.h>
+#include <signal.h>
 
 typedef void (*thread_entry_point)(void);
 typedef unsigned long long address_t; //?

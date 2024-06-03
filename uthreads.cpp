@@ -1,16 +1,107 @@
 #include "uthreads.h"
 
 
-static std::queue<thread*> ready_queue;
-static std::set<int> available_id;
+static std::list<thread*> ready_queue;
+static std::list<thread*> all_threads;
+static std::list<bool> available_id(MAX_THREAD_NUM, false);
+
 static thread* running_thread = nullptr;
-static int id_counter;
-static int quantum_time ;
+static int total_quantum;
 static int interval;
+
 static struct sigaction sa;
 static struct itimerval timer;
+static sigset_t set;
 
 
+void switch_thread(int x);
+
+//true = unblock , false = block
+int block_open(bool op)
+{
+  if(op == true)
+  {
+    if(sigprocmask (SIG_UNBLOCK,&set, nullptr))
+    {
+      ////////////////////////////////////////
+      return -1;
+    }
+  }
+  if (op == false)
+  {
+    if(sigprocmask (SIG_BLOCK,&set, nullptr))
+    {
+      ////////////////////////////////////////
+      return -1;
+    }
+  }
+  return 0;
+
+}
+
+void set_id_value(int pos,bool value)
+{
+  if (pos < available_id.size())
+  {
+    std::list<bool>::iterator it = available_id.begin();
+    std::advance(it, pos);
+    *it = value;
+    }
+}
+
+int check_if_thread_exist(int pos)
+{
+  if (pos < available_id.size())
+  {
+    std::list<bool>::iterator it = available_id.begin();
+    std::advance(it, pos);
+    if (*it == false)
+    {
+      return -1;
+    }
+    return 0;
+  }
+}
+
+int available_index()
+{
+  int index = 0;
+  for (auto it = available_id.begin(); it != available_id.end(); ++it, ++index) {
+    if (*it == false) {
+      return index;
+    }
+  }
+  return -1;
+
+}
+
+void thread_cleanup()
+{
+  for (auto it = all_threads.begin(); it != all_threads.end(); ++it) {
+    delete &(*it);
+  }
+}
+
+thread* search_thread(int id) {
+  for (auto it = all_threads.begin(); it != all_threads.end(); ++it) {
+    if ((*it)->get_id() == id) {
+      return *it;
+    }
+  }
+  return nullptr;
+}
+
+int delete_thread_from_ready_queue(int id)
+{
+  for (auto it = ready_queue.begin(); it != ready_queue.end(); ++it) {
+    if((*it)->get_id() == id )
+    {
+      ready_queue.erase (it);
+      return 0;
+    }
+  }
+  return -1;
+}
 
 
 /**
@@ -31,31 +122,38 @@ int uthread_init(int quantum_usecs){
     fprintf (stderr,"thread library error: quantum_usecs must be positive integer\n");
     return -1;
   }
-  quantum_time = 0;
-  interval = quantum_usecs;
 
+  if (sigemptyset(&set) == -1)
+  {
+    /////////////////////////////// need to print something////////////////////////////
+  }
+  if (sigaddset(&set, SIGVTALRM) == -1)
+  {
+    /////////////////////////////// need to print something////////////////////////////
+  }
 
+  sa.sa_handler = &switch_thread;
+  if (sigaction(SIGVTALRM, &sa, nullptr) < 0) {
+    /////////////////////////////// need to print something////////////////////////////
+    return -1;
+  }
 
+  timer.it_interval.tv_sec = quantum_usecs / 1000000;
+  timer.it_interval.tv_usec = quantum_usecs % 1000000;
 
+  if (setitimer(ITIMER_VIRTUAL, &timer, NULL))
+  {
+    return -1;
+  }
 
+  set_id_value(0,true);
+  thread *main_thread = new thread(0, nullptr);
+  all_threads.push_back (main_thread);
+  main_thread->set_state (0);
+  running_thread = main_thread;
+  return 0;
 
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 /**
@@ -70,7 +168,39 @@ int uthread_init(int quantum_usecs){
  *
  * @return On success, return the ID of the created thread. On failure, return -1.
 */
-int uthread_spawn(thread_entry_point entry_point);
+int uthread_spawn(thread_entry_point entry_point)
+{
+  int block_res = block_open (false);
+  if (block_res == -1)
+  {
+    /////////////////////////////////////
+    return -1;
+  }
+  if (entry_point == nullptr)
+  {
+    fprintf (stderr,"thread library error: entry point cant be nullptr\n");
+    return -1;
+  }
+
+  int res  = available_index ();
+  if (res == -1)
+  {
+    fprintf (stderr,"thread library error: reached max threads\n");
+    return -1;
+  }
+  thread* t = new thread(res,entry_point);
+  ready_queue.push_back(t);
+  all_threads.push_back (t);
+  set_id_value (res, true);
+
+  block_res = block_open (true);
+  if (block_res == -1)
+  {
+    /////////////////////////////////////
+    return -1;
+  }
+  return 0;
+}
 
 
 /**
@@ -83,7 +213,60 @@ int uthread_spawn(thread_entry_point entry_point);
  * @return The function returns 0 if the thread was successfully terminated and -1 otherwise. If a thread terminates
  * itself or the main thread is terminated, the function does not return.
 */
-int uthread_terminate(int tid);
+int uthread_terminate(int tid)
+{
+  int block_res = block_open (false);
+  if (block_res == -1)
+  {
+    /////////////////////////////////////
+    return -1;
+  }
+
+  if(check_if_thread_exist (tid) == -1)
+  {
+    fprintf (stderr,"something");
+    return -1;
+  }
+
+  if (tid == 0)
+  {
+    thread_cleanup();
+    block_res = block_open (true);
+    if (block_res == -1)
+    {
+      /////////////////////////////////////
+      return -1;
+    }
+    _exit (0);
+  }
+  else
+  { //todo when thread running terminated need to call switch_thread
+    thread* thead_to_delete = search_thread (tid);
+    int thread_to_delete_id = thead_to_delete->get_id();
+    set_id_value (thread_to_delete_id, false);
+    int res = delete_thread_from_ready_queue (thread_to_delete_id);
+    if (res == -1)
+    {
+      for (auto it = all_threads.begin(); it != all_threads.end(); ++it)
+      {
+        if((*it)->get_id() == thread_to_delete_id )
+        {
+          all_threads.erase (it);
+        }
+      }
+    }
+    delete thead_to_delete;
+
+    block_res = block_open (true);
+    if (block_res == -1)
+    {
+      /////////////////////////////////////
+      return -1;
+    }
+    return 0;
+  }
+
+}
 
 
 /**
@@ -95,7 +278,22 @@ int uthread_terminate(int tid);
  *
  * @return On success, return 0. On failure, return -1.
 */
-int uthread_block(int tid);
+int uthread_block(int tid)
+{
+  int exist = check_if_thread_exist (tid);
+  if (exist == -1)
+  {
+    ///////////////////////////////////////
+    return -1;
+  }
+
+
+}
+
+
+
+
+
 
 
 /**
