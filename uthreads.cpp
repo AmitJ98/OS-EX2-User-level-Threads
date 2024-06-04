@@ -10,7 +10,6 @@ static std::list<bool> available_id(MAX_THREAD_NUM, false);
 
 static thread* running_thread = nullptr;
 static int total_quantum = 0;
-static int interval;
 
 static struct sigaction sa;
 static struct itimerval timer;
@@ -80,7 +79,7 @@ int available_index()
 void thread_cleanup()
 {
   for (auto it = all_threads.begin(); it != all_threads.end(); ++it) {
-    delete &(*it);
+      delete &(*it);
   }
 }
 
@@ -145,9 +144,11 @@ void terminate_running(int tid){
       {
         all_threads.erase (it);
         delete *it;
+        break;
       }
     }
   }
+
   thread* new_running = ready_queue.front();
   new_running->set_state (RUNNING);
   running_thread = new_running;
@@ -156,25 +157,10 @@ void terminate_running(int tid){
 
 void time_handler(int sig)
 {
+  switch_threads();
   total_quantum++;
   running_thread->increace_quantum_counter();
-//  std::cout << running_thread->get_quantum_counter() << std::endl;
-  switch_threads();
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 /**
@@ -210,8 +196,9 @@ int uthread_init(int quantum_usecs){
     /////////////////////////////// need to print something////////////////////////////
     return -1;
   }
+
   timer.it_value.tv_sec = quantum_usecs / 1000000;
-  timer.it_value.tv_sec = quantum_usecs % 1000000;
+  timer.it_value.tv_usec = quantum_usecs % 1000000;
 
   timer.it_interval.tv_sec = quantum_usecs / 1000000;
   timer.it_interval.tv_usec = quantum_usecs % 1000000;
@@ -220,6 +207,7 @@ int uthread_init(int quantum_usecs){
   thread* main_thread = new thread(0, nullptr);
   main_thread->set_state (RUNNING);
   all_threads.push_back (main_thread);
+  ready_queue.push_back (main_thread);
   running_thread = main_thread;
   total_quantum++;
 
@@ -227,10 +215,7 @@ int uthread_init(int quantum_usecs){
   {
     return -1;
   }
-//  signal (SIGVTALRM,time_handler);
-//  running_thread->increace_quantum_counter();
   return 0;
-
 }
 
 
@@ -260,16 +245,16 @@ int uthread_spawn(thread_entry_point entry_point)
     return -1;
   }
 
-  int res  = available_index ();
-  if (res == -1)
+  int index  = available_index ();
+  if (index == -1)
   {
     fprintf (stderr,"thread library error: reached max threads\n");
     return -1;
   }
-  thread* t = new thread(res,entry_point);
+  thread* t = new thread(index,entry_point);
   ready_queue.push_back(t);
   all_threads.push_back (t);
-  set_id_value (res, true);
+  set_id_value (index, true);
 
   block_res = block_open (true);
   if (block_res == -1)
@@ -277,7 +262,7 @@ int uthread_spawn(thread_entry_point entry_point)
     /////////////////////////////////////
     return -1;
   }
-  return 0;
+  return index;
 }
 
 
@@ -309,12 +294,6 @@ int uthread_terminate(int tid)
   if (tid == 0)
   {
     thread_cleanup();
-    block_res = block_open (true);
-    if (block_res == -1)
-    {
-      /////////////////////////////////////
-      return -1;
-    }
     _exit (0);
   }
   else if (running_thread->get_id() == tid)
@@ -337,16 +316,14 @@ int uthread_terminate(int tid)
         }
       }
     }
-
-    block_res = block_open (true);
-    if (block_res == -1)
-    {
-      /////////////////////////////////////
-      return -1;
-    }
-    return 0;
   }
-
+  block_res = block_open (true);
+  if (block_res == -1)
+  {
+    /////////////////////////////////////
+    return -1;
+  }
+  return 0;
 }
 
 
@@ -466,7 +443,10 @@ int uthread_sleep(int num_quantums);
 */
 int uthread_get_tid()
 {
-  return running_thread->get_id();
+  block_open (false);
+  int id = running_thread->get_id();
+  block_open (true);
+  return id;
 }
 
 
@@ -480,7 +460,10 @@ int uthread_get_tid()
 */
 int uthread_get_total_quantums()
 {
-  return total_quantum;
+  block_open (false);
+  int q = total_quantum;
+  block_open (true);
+  return q;
 }
 
 
@@ -496,9 +479,13 @@ int uthread_get_total_quantums()
 int uthread_get_quantums(int tid)
 {
   block_open (false);
+  int exist = check_if_thread_exist (tid);
+  if (exist == -1)
+  {
+    return -1;
+  }
   thread *t  = search_thread (tid);
-//  std::cout << t->get_quantum_counter() << std::endl;
+  int q =  t->get_quantum_counter();
   block_open (true);
-  return t->get_quantum_counter();
-
+  return q;
 }
