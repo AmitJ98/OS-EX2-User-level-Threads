@@ -1,3 +1,4 @@
+#include <iostream>
 #include "uthreads.h"
 #define READY 0
 #define RUNNING 1
@@ -15,49 +16,6 @@ static struct sigaction sa;
 static struct itimerval timer;
 static sigset_t set;
 
-
-
-void switch_threads()
-{
-  total_quantum++;
-  running_thread->increace_quantum_counter();
-  ready_queue.pop_front();
-  ready_queue.push_back (running_thread);
-  running_thread->set_state (READY);
-
-  thread* next = ready_queue.front();
-  next->set_state (RUNNING);
-
-  if ((sigsetjmp(running_thread->_env,1)) == 0 )
-  {
-    running_thread = next;
-    siglongjmp(running_thread->_env,1);
-  }
-
-}
-
-
-void block_running_thread()
-{
-  switch_threads();
-  thread* thread_to_block = ready_queue.back();
-  thread_to_block->set_state (BLOCKED);
-  ready_queue.pop_back();
-
-}
-
-
-void terminate_running(){
-
-}
-
-
-void time_handler(int sig)
-{
-  total_quantum++;
-  running_thread->increace_quantum_counter();
-  switch_threads();
-}
 
 
 //true = unblock , false = block
@@ -148,6 +106,77 @@ int delete_thread_from_ready_queue(int id)
 }
 
 
+void switch_threads()
+{
+  ready_queue.pop_front();
+  ready_queue.push_back (running_thread);
+  running_thread->set_state (READY);
+
+  thread* next = ready_queue.front();
+  next->set_state (RUNNING);
+
+  if ((sigsetjmp(running_thread->_env,1)) == 0 )
+  {
+    running_thread = next;
+//    running_thread->increace_quantum_counter();
+    siglongjmp(running_thread->_env,1);
+  }
+}
+
+
+void block_running_thread()
+{
+  switch_threads();
+  thread* thread_to_block = ready_queue.back();
+  thread_to_block->set_state (BLOCKED);
+  ready_queue.pop_back();
+
+}
+
+
+void terminate_running(int tid){
+  set_id_value (tid, false);
+  int res = delete_thread_from_ready_queue (tid);
+  if (res == 0)
+  {
+    for (auto it = all_threads.begin(); it != all_threads.end(); ++it)
+    {
+      if((*it)->get_id() == tid )
+      {
+        all_threads.erase (it);
+        delete *it;
+      }
+    }
+  }
+  thread* new_running = ready_queue.front();
+  new_running->set_state (RUNNING);
+  running_thread = new_running;
+}
+
+
+void time_handler(int sig)
+{
+  total_quantum++;
+  running_thread->increace_quantum_counter();
+//  std::cout << running_thread->get_quantum_counter() << std::endl;
+  switch_threads();
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 /**
  * @brief initializes the thread library.
  *
@@ -181,19 +210,25 @@ int uthread_init(int quantum_usecs){
     /////////////////////////////// need to print something////////////////////////////
     return -1;
   }
+  timer.it_value.tv_sec = quantum_usecs / 1000000;
+  timer.it_value.tv_sec = quantum_usecs % 1000000;
 
   timer.it_interval.tv_sec = quantum_usecs / 1000000;
   timer.it_interval.tv_usec = quantum_usecs % 1000000;
+
+  set_id_value(0,true);
+  thread* main_thread = new thread(0, nullptr);
+  main_thread->set_state (RUNNING);
+  all_threads.push_back (main_thread);
+  running_thread = main_thread;
+  total_quantum++;
 
   if (setitimer(ITIMER_VIRTUAL, &timer, NULL))
   {
     return -1;
   }
-
-  set_id_value(0,true);
-  thread *main_thread = new thread(0, nullptr);
-  main_thread->set_state (0);
-  running_thread = main_thread;
+//  signal (SIGVTALRM,time_handler);
+//  running_thread->increace_quantum_counter();
   return 0;
 
 }
@@ -284,25 +319,24 @@ int uthread_terminate(int tid)
   }
   else if (running_thread->get_id() == tid)
   {
-    //todo when thread running terminated need to call switch_thread
+    terminate_running (tid);
   }
   else
   {
-    thread* thead_to_delete = search_thread (tid);
-    int thread_to_delete_id = thead_to_delete->get_id();
+    int thread_to_delete_id = tid;
     set_id_value (thread_to_delete_id, false);
     int res = delete_thread_from_ready_queue (thread_to_delete_id);
-    if (res == -1)
+    if (res == 0)
     {
       for (auto it = all_threads.begin(); it != all_threads.end(); ++it)
       {
         if((*it)->get_id() == thread_to_delete_id )
         {
           all_threads.erase (it);
+          delete *it;
         }
       }
     }
-    delete thead_to_delete;
 
     block_res = block_open (true);
     if (block_res == -1)
@@ -430,7 +464,10 @@ int uthread_sleep(int num_quantums);
  *
  * @return The ID of the calling thread.
 */
-int uthread_get_tid();
+int uthread_get_tid()
+{
+  return running_thread->get_id();
+}
 
 
 /**
@@ -441,7 +478,10 @@ int uthread_get_tid();
  *
  * @return The total number of quantums.
 */
-int uthread_get_total_quantums();
+int uthread_get_total_quantums()
+{
+  return total_quantum;
+}
 
 
 /**
@@ -453,4 +493,12 @@ int uthread_get_total_quantums();
  *
  * @return On success, return the number of quantums of the thread with ID tid. On failure, return -1.
 */
-int uthread_get_quantums(int tid);
+int uthread_get_quantums(int tid)
+{
+  block_open (false);
+  thread *t  = search_thread (tid);
+//  std::cout << t->get_quantum_counter() << std::endl;
+  block_open (true);
+  return t->get_quantum_counter();
+
+}
