@@ -18,26 +18,16 @@ static sigset_t set;
 
 
 //true = unblock , false = block
-int block_open(bool op)
+void block_open(bool op)
 {
-  if(op == true)
-  {
-    if(sigprocmask (SIG_UNBLOCK,&set, nullptr))
+    if (op)
     {
-      ////////////////////////////////////////
-      return -1;
+      sigprocmask (SIG_UNBLOCK, &set, nullptr);
     }
-  }
-  if (op == false)
-  {
-    if(sigprocmask (SIG_BLOCK,&set, nullptr))
+    else
     {
-      ////////////////////////////////////////
-      return -1;
+      sigprocmask (SIG_BLOCK, &set, nullptr);
     }
-  }
-  return 0;
-
 }
 
 void set_id_value(int pos,bool value)
@@ -47,7 +37,7 @@ void set_id_value(int pos,bool value)
     std::list<bool>::iterator it = available_id.begin();
     std::advance(it, pos);
     *it = value;
-    }
+  }
 }
 
 int check_if_thread_exist(int pos)
@@ -79,7 +69,7 @@ int available_index()
 void thread_cleanup()
 {
   for (auto it = all_threads.begin(); it != all_threads.end(); ++it) {
-      delete &(*it);
+      delete (*it);
   }
 }
 
@@ -117,9 +107,32 @@ void switch_threads()
   if ((sigsetjmp(running_thread->_env,1)) == 0 )
   {
     running_thread = next;
-//    running_thread->increace_quantum_counter();
+    total_quantum++;
+    running_thread->increace_quantum_counter();
     siglongjmp(running_thread->_env,1);
   }
+}
+
+
+void terminate_running(int tid){
+  set_id_value (tid, false);
+  ready_queue.pop_front();
+  for (auto it = all_threads.begin(); it != all_threads.end(); ++it)
+  {
+    if((*it)->get_id() == tid )
+    {
+      all_threads.erase (it);
+      delete *it;
+      break;
+    }
+  }
+
+  running_thread = ready_queue.front();
+  running_thread->set_state (RUNNING);
+  total_quantum++;
+  running_thread->increace_quantum_counter();
+  siglongjmp(running_thread->_env,1);
+
 }
 
 
@@ -133,33 +146,9 @@ void block_running_thread()
 }
 
 
-void terminate_running(int tid){
-  set_id_value (tid, false);
-  int res = delete_thread_from_ready_queue (tid);
-  if (res == 0)
-  {
-    for (auto it = all_threads.begin(); it != all_threads.end(); ++it)
-    {
-      if((*it)->get_id() == tid )
-      {
-        all_threads.erase (it);
-        delete *it;
-        break;
-      }
-    }
-  }
-
-  thread* new_running = ready_queue.front();
-  new_running->set_state (RUNNING);
-  running_thread = new_running;
-}
-
-
 void time_handler(int sig)
 {
   switch_threads();
-  total_quantum++;
-  running_thread->increace_quantum_counter();
 }
 
 
@@ -209,7 +198,7 @@ int uthread_init(int quantum_usecs){
   all_threads.push_back (main_thread);
   ready_queue.push_back (main_thread);
   running_thread = main_thread;
-  total_quantum++;
+  total_quantum=1;
 
   if (setitimer(ITIMER_VIRTUAL, &timer, NULL))
   {
@@ -233,12 +222,7 @@ int uthread_init(int quantum_usecs){
 */
 int uthread_spawn(thread_entry_point entry_point)
 {
-  int block_res = block_open (false);
-  if (block_res == -1)
-  {
-    /////////////////////////////////////
-    return -1;
-  }
+  block_open (false);
   if (entry_point == nullptr)
   {
     fprintf (stderr,"thread library error: entry point cant be nullptr\n");
@@ -256,12 +240,7 @@ int uthread_spawn(thread_entry_point entry_point)
   all_threads.push_back (t);
   set_id_value (index, true);
 
-  block_res = block_open (true);
-  if (block_res == -1)
-  {
-    /////////////////////////////////////
-    return -1;
-  }
+  block_open (true);
   return index;
 }
 
@@ -278,16 +257,12 @@ int uthread_spawn(thread_entry_point entry_point)
 */
 int uthread_terminate(int tid)
 {
-  int block_res = block_open (false);
-  if (block_res == -1)
-  {
-    /////////////////////////////////////
-    return -1;
-  }
+  block_open (false);
 
   if(check_if_thread_exist (tid) == -1)
   {
     fprintf (stderr,"something");
+    block_open (true);
     return -1;
   }
 
@@ -317,12 +292,7 @@ int uthread_terminate(int tid)
       }
     }
   }
-  block_res = block_open (true);
-  if (block_res == -1)
-  {
-    /////////////////////////////////////
-    return -1;
-  }
+  block_open (true);
   return 0;
 }
 
@@ -338,13 +308,7 @@ int uthread_terminate(int tid)
 */
 int uthread_block(int tid)
 {
-  int block_res = block_open (false);
-  if (block_res == -1)
-  {
-    /////////////////////////////////////
-    return -1;
-  }
-
+  block_open (false);
   if (check_if_thread_exist (tid) == -1)
   {
     ///////////////////////////////////////
@@ -367,12 +331,8 @@ int uthread_block(int tid)
     thread_to_block->set_state (BLOCKED);
   }
 
-  block_res = block_open (true);
-  if (block_res == -1)
-  {
-    /////////////////////////////////////
-    return -1;
-  }
+  block_open (true);
+
   return 0;
 
 }
@@ -388,12 +348,7 @@ int uthread_block(int tid)
 */
 int uthread_resume(int tid)
 {
-  int block_res = block_open (false);
-  if (block_res == -1)
-  {
-    /////////////////////////////////////
-    return -1;
-  }
+  block_open (false);
 
   if (check_if_thread_exist (tid) == -1)
   {
@@ -407,17 +362,9 @@ int uthread_resume(int tid)
     ready_queue.push_back (thread_to_resume);
   }
 
-  block_res = block_open (true);
-  if (block_res == -1)
-  {
-    /////////////////////////////////////
-    return -1;
-  }
+  block_open (true);
   return 0;
-
 }
-
-
 
 
 /**
@@ -434,6 +381,7 @@ int uthread_resume(int tid)
  * @return On success, return 0. On failure, return -1.
 */
 int uthread_sleep(int num_quantums);
+
 
 
 /**
@@ -461,7 +409,7 @@ int uthread_get_tid()
 int uthread_get_total_quantums()
 {
   block_open (false);
-  int q = total_quantum;
+  int q = total_quantum -1;////////////////////////
   block_open (true);
   return q;
 }
