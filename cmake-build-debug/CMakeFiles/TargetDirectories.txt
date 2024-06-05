@@ -1,3 +1,0 @@
-/mnt/c/Users/mayah/Desktop/school/second/unity/second semester/Os_Ex2/cmake-build-debug/CMakeFiles/Os_Ex2.dir
-/mnt/c/Users/mayah/Desktop/school/second/unity/second semester/Os_Ex2/cmake-build-debug/CMakeFiles/edit_cache.dir
-/mnt/c/Users/mayah/Desktop/school/second/unity/second semester/Os_Ex2/cmake-build-debug/CMakeFiles/rebuild_cache.dir
