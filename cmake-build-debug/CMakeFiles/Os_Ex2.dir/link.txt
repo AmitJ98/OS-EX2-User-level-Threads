@@ -1,0 +1,1 @@
+/usr/bin/c++ -g CMakeFiles/Os_Ex2.dir/demo_itimer.c.o CMakeFiles/Os_Ex2.dir/demo_jmp.c.o CMakeFiles/Os_Ex2.dir/demo_singInt_handler.c.o CMakeFiles/Os_Ex2.dir/thread.cpp.o CMakeFiles/Os_Ex2.dir/uthreads.cpp.o -o Os_Ex2 
