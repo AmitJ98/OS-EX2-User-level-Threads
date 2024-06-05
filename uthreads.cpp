@@ -343,16 +343,13 @@ int uthread_terminate(int tid)
   {
     set_id_value (tid, false);
     delete_thread_from_ready_queue (tid);
-    for (auto it = all_threads.begin(); it != all_threads.end();)
+    for (auto it = all_threads.begin(); it != all_threads.end(); ++it)
     {
-      if ((*it)->get_id() == tid)
+      if((*it)->get_id() == tid )
       {
-        delete *it;  // Delete the element pointed to by it
-        it = all_threads.erase(it);  // Erase the element from the list and update the iterator
-      }
-      else
-      {
-        it++;  // Move to the next element
+        all_threads.erase(it);
+        delete *it;
+        break;
       }
     }
   }
