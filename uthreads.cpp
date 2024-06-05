@@ -95,12 +95,53 @@ int delete_thread_from_ready_queue(int id)
 }
 
 
-// 1 = switch , 2 = terminate , 3 = blocked
-void switch_threads(int action, int tid)
+void block_handler()
 {
-  total_quantum++;
-  if (action == 1)
+  ready_queue.pop_front ();
+  ready_queue.push_back (running_thread);
+  running_thread->set_state (READY);
+
+  thread *next = ready_queue.front ();
+  next->set_state (RUNNING);
+
+  if ((sigsetjmp(running_thread->_env, 1)) == 0)
   {
+    running_thread = next;
+    total_quantum++;
+    running_thread->increace_quantum_counter ();
+    thread* thread_to_block = ready_queue.back();
+    thread_to_block->set_state (BLOCKED);
+    ready_queue.pop_back();
+    setitimer(ITIMER_VIRTUAL, &timer, NULL);
+    siglongjmp (running_thread->_env, 1);
+  }
+}
+
+
+void terminate_handler(int tid)
+{
+  set_id_value (tid, false);
+  ready_queue.pop_front();
+  for (auto it = all_threads.begin(); it != all_threads.end(); ++it)
+  {
+    if((*it)->get_id() == tid )
+    {
+      all_threads.erase (it);
+      delete *it;
+      break;
+    }
+  }
+  running_thread = ready_queue.front();
+  running_thread->set_state (RUNNING);
+  total_quantum++;
+  running_thread->increace_quantum_counter();
+  setitimer(ITIMER_VIRTUAL, &timer, NULL);
+  siglongjmp(running_thread->_env,1);
+}
+
+
+void time_handler(int sig)
+{
     ready_queue.pop_front ();
     ready_queue.push_back (running_thread);
     running_thread->set_state (READY);
@@ -111,43 +152,12 @@ void switch_threads(int action, int tid)
     if ((sigsetjmp(running_thread->_env, 1)) == 0)
     {
       running_thread = next;
+      total_quantum++;
       running_thread->increace_quantum_counter ();
       siglongjmp (running_thread->_env, 1);
     }
-  }
-  if (action == 2)
-  {
-    set_id_value (tid, false);
-    ready_queue.pop_front();
-    for (auto it = all_threads.begin(); it != all_threads.end(); ++it)
-    {
-      if((*it)->get_id() == tid )
-      {
-        all_threads.erase (it);
-        delete *it;
-        break;
-      }
-    }
-
-    running_thread = ready_queue.front();
-    running_thread->set_state (RUNNING);
-    running_thread->increace_quantum_counter();
-    siglongjmp(running_thread->_env,1);
-
-  }
-  if (action == 3)
-  {
-    thread* thread_to_block = ready_queue.back();
-    thread_to_block->set_state (BLOCKED);
-    ready_queue.pop_back();
-  }
 }
 
-
-void time_handler(int sig)
-{
-  switch_threads(1,0);
-}
 
 
 /**
@@ -196,7 +206,7 @@ int uthread_init(int quantum_usecs){
   all_threads.push_back (main_thread);
   ready_queue.push_back (main_thread);
   running_thread = main_thread;
-  total_quantum=1;
+  total_quantum++;
 
   if (setitimer(ITIMER_VIRTUAL, &timer, NULL))
   {
@@ -238,6 +248,7 @@ int uthread_spawn(thread_entry_point entry_point)
   all_threads.push_back (t);
   set_id_value (index, true);
 
+
   block_open (true);
   return index;
 }
@@ -271,22 +282,19 @@ int uthread_terminate(int tid)
   }
   else if (running_thread->get_id() == tid)
   {
-    switch_threads (2,tid);
+    terminate_handler (tid);
   }
   else
   {
     int thread_to_delete_id = tid;
     set_id_value (thread_to_delete_id, false);
-    int res = delete_thread_from_ready_queue (thread_to_delete_id);
-    if (res == 0)
+    delete_thread_from_ready_queue (thread_to_delete_id);
+    for (auto it = all_threads.begin(); it != all_threads.end(); ++it)
     {
-      for (auto it = all_threads.begin(); it != all_threads.end(); ++it)
+      if((*it)->get_id() == thread_to_delete_id )
       {
-        if((*it)->get_id() == thread_to_delete_id )
-        {
-          all_threads.erase (it);
-          delete *it;
-        }
+        all_threads.erase (it);
+        delete *it;
       }
     }
   }
@@ -307,7 +315,7 @@ int uthread_terminate(int tid)
 int uthread_block(int tid)
 {
   block_open (false);
-  if (check_if_thread_exist (tid) == -1)
+  if (check_if_thread_exist (tid) == -1 || tid == 0)
   {
     ///////////////////////////////////////
     return -1;
@@ -316,7 +324,7 @@ int uthread_block(int tid)
   thread* thread_to_block = search_thread (tid);
   if (thread_to_block == running_thread)
   {
-    switch_threads(3,0);
+    block_handler();
   }
 
   else if(thread_to_block->get_state() == READY)
@@ -407,7 +415,7 @@ int uthread_get_tid()
 int uthread_get_total_quantums()
 {
   block_open (false);
-  int q = total_quantum -1;////////////////////////
+  int q = total_quantum ;
   block_open (true);
   return q;
 }
