@@ -236,14 +236,12 @@ int uthread_init(int quantum_usecs){
   {
       fprintf (stderr,SYSTEM_ERROR" sigaddset failed\n");
       _exit(1);
-//      return -1;
   }
 
   sa.sa_handler = &time_handler;
   if (sigaction(SIGVTALRM, &sa, nullptr) < 0) {
       fprintf (stderr,SYSTEM_ERROR" sigaction failed\n");
       _exit(1);
-      return -1;
   }
 
   timer.it_value.tv_sec = quantum_usecs / 1000000;
@@ -264,7 +262,6 @@ int uthread_init(int quantum_usecs){
   {
       fprintf (stderr,SYSTEM_ERROR" setitimer failed\n");
       _exit(1);
-    return -1;
   }
   return 0;
 }
@@ -288,6 +285,7 @@ int uthread_spawn(thread_entry_point entry_point)
   if (entry_point == nullptr)
   {
     fprintf (stderr,LIBRARY_ERROR" entry point cant be nullptr\n");
+    unblock_signals (true);
     return -1;
   }
 
@@ -295,6 +293,7 @@ int uthread_spawn(thread_entry_point entry_point)
   if (index == -1)
   {
     fprintf (stderr,LIBRARY_ERROR" reached max threads\n");
+    unblock_signals (true);
     return -1;
   }
   thread* t = new thread(index,entry_point);
@@ -406,7 +405,7 @@ int uthread_resume(int tid)
 
   if (check_if_thread_exist (tid) == -1)
   {
-      fprintf (stderr,LIBRARY_ERROR" tid don't exist or tid == 0\n");
+    fprintf (stderr,LIBRARY_ERROR" tid don't exist or tid == 0\n");
     unblock_signals(true);
     return -1;
   }
@@ -496,7 +495,7 @@ int uthread_get_quantums(int tid)
   int exist = check_if_thread_exist (tid);
   if (exist == -1)
   {
-      fprintf (stderr,LIBRARY_ERROR" tid don't exist\n");
+    fprintf (stderr,LIBRARY_ERROR" tid don't exist\n");
     unblock_signals (true);
     return -1;
   }
