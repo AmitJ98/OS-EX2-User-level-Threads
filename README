@@ -1,0 +1,53 @@
+amitjoseph98,Maya.heilbrun
+Amitjoseph (207255050) , MayaHeilbrun(207583410)
+EX: 2
+
+FILES:
+thread.h - the header for the thread.cpp
+thread.cpp - class which thread is declared and saves each thread information
+uthread.cpp - Implantation of the user-level threads library
+makefile
+
+
+REMARKS:
+
+*OS Exercise 2 - Theoretical Questions*
+
+1. a. sigsetjmp -saves the current calling environment’s stack context for later use by siglongjmp. The
+      saved state includes the stack context, the program counter, and optionally, the current signal mask.
+      siglongjmp -restores the environment saved by the most recent call of sigsetjmp. It will jump back to the
+      point where sigsetjmp was called and continue the code as if sigsetjmp just returned.
+   b. sigsetjmp and siglongjmp allow a program to save and restore the current signal mask.
+      the sigsetjmp allows you to save it if the savemask is non-zero,and the siglongjmp restores it.
+
+2. Example for general use of user-level threads: web browser
+The user-level	threads are a reasonable choice for this because:
+   a. lower overhead - in web browser, there a lot of threads running a the same time- lower overhead here is crucial.
+      The web browse dealing with thousand of users at the same time.
+   b. Scheduling can be application specific - in user-level threads the programmer can control the priority of each threads,
+      a thing which can optimize the browser.
+
+3.Advantages -
+   a. isolation - if one tab is crushing, won't affect other tabs.
+   b. security - isolates each tab which creates a barrier between data that can reduce the security breach between tabs
+   c. performance - the browser can use multiple cores better. This way it can create priority between threads.
+  Disadvantages -
+   a. Higher Memory usage - each process requires his own memory space and resources leads to higher overall memory usage.
+   b. Creating a new process each tab is "expensive".
+   c. Shared resources - managing the access to the same resources with a lot of threads can be difficult.
+
+4. The "kill pid" command from the CMD, sends a signal to the presses and kills it:
+	When typing 'kill pid' - the keyboard generates a hardware interrupt to signal the CPU that there is
+		input from the user
+	The OS's interrupt handler prosses the input from the CMD.
+	The shell reads the input - and calls a 'kill' system call to the OS.
+	The OS sends the signal to the application prosses
+	The application handles the signal - leading to terminating the prosses.
+
+5. Real time - Regular elapsed time (clock)
+Example of real time - Watching a video - the time passed as regular time.
+
+Virtual time - advanced only in response to certain events or actions within a system.
+Example of virtual time - in Computer games time can be "stopped" and run as we wish - so we use virtual time of the game.
+
+

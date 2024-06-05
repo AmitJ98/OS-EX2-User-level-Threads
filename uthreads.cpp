@@ -3,6 +3,8 @@
 #define READY 0
 #define RUNNING 1
 #define BLOCKED 2
+#define LIBRARY_ERROR "thread library error:"
+#define SYSTEM_ERROR "system error:"
 
 static std::list<thread*> ready_queue;
 static std::list<thread*> all_threads;
@@ -17,16 +19,35 @@ static sigset_t set;
 
 
 
+
+
+
+
+void thread_cleanup()
+{
+    for (auto it = all_threads.begin(); it != all_threads.end(); ++it) {
+        delete (*it);
+    }
+}
+
 //true = unblock , false = block
 void unblock_signals(bool op)
 {
     if (op)
     {
-      sigprocmask (SIG_UNBLOCK, &set, nullptr);
+      if(sigprocmask (SIG_UNBLOCK, &set, nullptr)==-1){
+          fprintf (stderr,SYSTEM_ERROR" unblocksignals failed\n");
+          thread_cleanup();
+          _exit(1);
+      }
     }
     else
     {
-      sigprocmask (SIG_BLOCK, &set, nullptr);
+      if(sigprocmask (SIG_BLOCK, &set, nullptr)==-1){
+          fprintf (stderr,SYSTEM_ERROR" blocksignals failed\n");
+          thread_cleanup();
+          _exit(1);
+      }
     }
 }
 
@@ -46,7 +67,7 @@ int check_if_thread_exist(int pos)
   {
     std::list<bool>::iterator it = available_id.begin();
     std::advance(it, pos);
-    if (*it == false)
+    if (!*it)
     {
       return -1;
     }
@@ -58,7 +79,7 @@ int available_index()
 {
   int index = 0;
   for (auto it = available_id.begin(); it != available_id.end(); ++it, ++index) {
-    if (*it == false)
+    if (!*it)
     {
       return index;
     }
@@ -67,12 +88,7 @@ int available_index()
 
 }
 
-void thread_cleanup()
-{
-  for (auto it = all_threads.begin(); it != all_threads.end(); ++it) {
-      delete (*it);
-  }
-}
+
 
 thread* search_thread(int id) {
   for (auto it = all_threads.begin(); it != all_threads.end(); ++it)
@@ -133,7 +149,11 @@ void block_handler(bool need_to_block)
     running_thread = next;
     total_quantum++;
     running_thread->increace_quantum_counter ();
-    setitimer(ITIMER_VIRTUAL, &timer, NULL);
+    if(setitimer(ITIMER_VIRTUAL, &timer, NULL)==-1){
+        fprintf (stderr,SYSTEM_ERROR" setitimer failed\n");
+        thread_cleanup();
+        _exit(1);
+    }
     siglongjmp (running_thread->_env, 1);
   }
 }
@@ -156,7 +176,11 @@ void terminate_handler(int tid)
   running_thread->set_state (RUNNING);
   total_quantum++;
   running_thread->increace_quantum_counter();
-  setitimer(ITIMER_VIRTUAL, &timer, NULL);
+    if(setitimer(ITIMER_VIRTUAL, &timer, NULL)==-1){
+        fprintf (stderr,SYSTEM_ERROR" setitimer failed\n");
+        thread_cleanup();
+        _exit(1);
+    }
   siglongjmp(running_thread->_env,1);
 }
 
@@ -198,23 +222,28 @@ void time_handler(int sig)
 int uthread_init(int quantum_usecs){
   if (quantum_usecs <= 0)
   {
-    fprintf (stderr,"thread library error: quantum_usecs must be positive integer\n");
+    fprintf (stderr,LIBRARY_ERROR" quantum_usecs must be positive integer\n");
     return -1;
   }
 
   if (sigemptyset(&set) == -1)
   {
-    /////////////////////////////// need to print something////////////////////////////
+      fprintf (stderr,SYSTEM_ERROR" sigemptyset failed\n");
+      _exit(1);
+
   }
   if (sigaddset(&set, SIGVTALRM) == -1)
   {
-    /////////////////////////////// need to print something////////////////////////////
+      fprintf (stderr,SYSTEM_ERROR" sigaddset failed\n");
+      _exit(1);
+//      return -1;
   }
 
   sa.sa_handler = &time_handler;
   if (sigaction(SIGVTALRM, &sa, nullptr) < 0) {
-    /////////////////////////////// need to print something////////////////////////////
-    return -1;
+      fprintf (stderr,SYSTEM_ERROR" sigaction failed\n");
+      _exit(1);
+      return -1;
   }
 
   timer.it_value.tv_sec = quantum_usecs / 1000000;
@@ -233,7 +262,8 @@ int uthread_init(int quantum_usecs){
 
   if (setitimer(ITIMER_VIRTUAL, &timer, NULL))
   {
-    ////////////////////////////////////////////
+      fprintf (stderr,SYSTEM_ERROR" setitimer failed\n");
+      _exit(1);
     return -1;
   }
   return 0;
@@ -257,14 +287,14 @@ int uthread_spawn(thread_entry_point entry_point)
   unblock_signals (false);
   if (entry_point == nullptr)
   {
-    fprintf (stderr,"thread library error: entry point cant be nullptr\n");
+    fprintf (stderr,LIBRARY_ERROR" entry point cant be nullptr\n");
     return -1;
   }
 
   int index  = available_index();
   if (index == -1)
   {
-    fprintf (stderr,"thread library error: reached max threads\n");
+    fprintf (stderr,LIBRARY_ERROR" reached max threads\n");
     return -1;
   }
   thread* t = new thread(index,entry_point);
@@ -293,7 +323,7 @@ int uthread_terminate(int tid)
 
   if(check_if_thread_exist (tid) == -1)
   {
-    fprintf (stderr,"something");
+    fprintf (stderr,LIBRARY_ERROR" tid don't exist\n");
     unblock_signals (true);
     return -1;
   }
@@ -301,6 +331,7 @@ int uthread_terminate(int tid)
   if (tid == 0)
   {
     thread_cleanup();
+    unblock_signals (true);
     _exit (0);
   }
   else if (running_thread->get_id() == tid)
@@ -339,8 +370,9 @@ int uthread_block(int tid)
   unblock_signals (false);
   if (check_if_thread_exist (tid) == -1 || tid == 0)
   {
-    ///////////////////////////////////////
-    return -1;
+      fprintf (stderr,LIBRARY_ERROR" tid don't exist or tid == 0\n");
+      unblock_signals (true);
+      return -1;
   }
 
   thread* thread_to_block = search_thread (tid);
@@ -374,7 +406,7 @@ int uthread_resume(int tid)
 
   if (check_if_thread_exist (tid) == -1)
   {
-    ///////////////////////////////////////
+      fprintf (stderr,LIBRARY_ERROR" tid don't exist or tid == 0\n");
     unblock_signals(true);
     return -1;
   }
@@ -464,6 +496,7 @@ int uthread_get_quantums(int tid)
   int exist = check_if_thread_exist (tid);
   if (exist == -1)
   {
+      fprintf (stderr,LIBRARY_ERROR" tid don't exist\n");
     unblock_signals (true);
     return -1;
   }
