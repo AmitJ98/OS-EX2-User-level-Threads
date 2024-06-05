@@ -52,6 +52,8 @@ thread::thread (int id , thread_entry_point f)
 {
   _id = id;
   _state = READY;
+  _sleep = false;
+  _time_to_sleep = 0;
   _quantum_counter = 0;
   _f = f;
   _stack = new char[STACK_SIZE];
@@ -85,13 +87,39 @@ int thread::get_quantum_counter () const
   return _quantum_counter;
 }
 
+bool thread::get_sleep ()
+{
+  return _sleep;
+}
+
+int thread::get_time_to_sleep ()
+{
+  return _time_to_sleep;
+}
+
 
 void thread::set_state (int change_to)
 {
   _state = change_to;
 }
 
+void thread::set_sleep (bool state)
+{
+  _sleep = state;
+}
+
+void thread::set_time_to_sleep (int q)
+{
+  _time_to_sleep = q;
+
+}
+
 void thread::increace_quantum_counter ()
 {
   _quantum_counter++;
+}
+
+void thread::decreace_time_to_sleep ()
+{
+  _time_to_sleep--;
 }

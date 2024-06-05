@@ -18,7 +18,7 @@ static sigset_t set;
 
 
 //true = unblock , false = block
-void block_open(bool op)
+void unblock_signals(bool op)
 {
     if (op)
     {
@@ -58,7 +58,8 @@ int available_index()
 {
   int index = 0;
   for (auto it = available_id.begin(); it != available_id.end(); ++it, ++index) {
-    if (*it == false) {
+    if (*it == false)
+    {
       return index;
     }
   }
@@ -74,7 +75,8 @@ void thread_cleanup()
 }
 
 thread* search_thread(int id) {
-  for (auto it = all_threads.begin(); it != all_threads.end(); ++it) {
+  for (auto it = all_threads.begin(); it != all_threads.end(); ++it)
+  {
     if ((*it)->get_id() == id) {
       return *it;
     }
@@ -95,11 +97,33 @@ int delete_thread_from_ready_queue(int id)
 }
 
 
-void block_handler()
+void sleep_check()
 {
-  ready_queue.pop_front ();
-  ready_queue.push_back (running_thread);
-  running_thread->set_state (READY);
+  for (auto it = all_threads.begin(); it != all_threads.end(); ++it)
+  {
+    if ((*it)->get_sleep())
+    {
+      (*it)->decreace_time_to_sleep();
+      if ((*it)->get_time_to_sleep() == 0)
+      {
+        (*it)->set_sleep (false);
+        if((*it)->get_state() == READY)
+        {
+          ready_queue.push_back (*it);
+        }
+      }
+    }
+  }
+}
+
+
+void block_handler(bool need_to_block)
+{
+  ready_queue.pop_front();
+  if (need_to_block)
+  {
+    running_thread->set_state (BLOCKED);
+  }
 
   thread *next = ready_queue.front ();
   next->set_state (RUNNING);
@@ -109,9 +133,6 @@ void block_handler()
     running_thread = next;
     total_quantum++;
     running_thread->increace_quantum_counter ();
-    thread* thread_to_block = ready_queue.back();
-    thread_to_block->set_state (BLOCKED);
-    ready_queue.pop_back();
     setitimer(ITIMER_VIRTUAL, &timer, NULL);
     siglongjmp (running_thread->_env, 1);
   }
@@ -142,6 +163,8 @@ void terminate_handler(int tid)
 
 void time_handler(int sig)
 {
+    sleep_check();
+
     ready_queue.pop_front ();
     ready_queue.push_back (running_thread);
     running_thread->set_state (READY);
@@ -153,7 +176,7 @@ void time_handler(int sig)
     {
       running_thread = next;
       total_quantum++;
-      running_thread->increace_quantum_counter ();
+      running_thread->increace_quantum_counter();
       siglongjmp (running_thread->_env, 1);
     }
 }
@@ -196,7 +219,6 @@ int uthread_init(int quantum_usecs){
 
   timer.it_value.tv_sec = quantum_usecs / 1000000;
   timer.it_value.tv_usec = quantum_usecs % 1000000;
-
   timer.it_interval.tv_sec = quantum_usecs / 1000000;
   timer.it_interval.tv_usec = quantum_usecs % 1000000;
 
@@ -206,10 +228,12 @@ int uthread_init(int quantum_usecs){
   all_threads.push_back (main_thread);
   ready_queue.push_back (main_thread);
   running_thread = main_thread;
+  running_thread->increace_quantum_counter();
   total_quantum++;
 
   if (setitimer(ITIMER_VIRTUAL, &timer, NULL))
   {
+    ////////////////////////////////////////////
     return -1;
   }
   return 0;
@@ -230,14 +254,14 @@ int uthread_init(int quantum_usecs){
 */
 int uthread_spawn(thread_entry_point entry_point)
 {
-  block_open (false);
+  unblock_signals (false);
   if (entry_point == nullptr)
   {
     fprintf (stderr,"thread library error: entry point cant be nullptr\n");
     return -1;
   }
 
-  int index  = available_index ();
+  int index  = available_index();
   if (index == -1)
   {
     fprintf (stderr,"thread library error: reached max threads\n");
@@ -248,8 +272,7 @@ int uthread_spawn(thread_entry_point entry_point)
   all_threads.push_back (t);
   set_id_value (index, true);
 
-
-  block_open (true);
+  unblock_signals (true);
   return index;
 }
 
@@ -266,12 +289,12 @@ int uthread_spawn(thread_entry_point entry_point)
 */
 int uthread_terminate(int tid)
 {
-  block_open (false);
+  unblock_signals (false);
 
   if(check_if_thread_exist (tid) == -1)
   {
     fprintf (stderr,"something");
-    block_open (true);
+    unblock_signals (true);
     return -1;
   }
 
@@ -286,19 +309,18 @@ int uthread_terminate(int tid)
   }
   else
   {
-    int thread_to_delete_id = tid;
-    set_id_value (thread_to_delete_id, false);
-    delete_thread_from_ready_queue (thread_to_delete_id);
+    set_id_value (tid, false);
+    delete_thread_from_ready_queue (tid);
     for (auto it = all_threads.begin(); it != all_threads.end(); ++it)
     {
-      if((*it)->get_id() == thread_to_delete_id )
+      if((*it)->get_id() == tid )
       {
         all_threads.erase (it);
         delete *it;
       }
     }
   }
-  block_open (true);
+  unblock_signals (true);
   return 0;
 }
 
@@ -314,7 +336,7 @@ int uthread_terminate(int tid)
 */
 int uthread_block(int tid)
 {
-  block_open (false);
+  unblock_signals (false);
   if (check_if_thread_exist (tid) == -1 || tid == 0)
   {
     ///////////////////////////////////////
@@ -324,23 +346,17 @@ int uthread_block(int tid)
   thread* thread_to_block = search_thread (tid);
   if (thread_to_block == running_thread)
   {
-    block_handler();
+    block_handler(true);
   }
 
   else if(thread_to_block->get_state() == READY)
   {
-    int delete_from_ready = delete_thread_from_ready_queue (tid);
-    if (delete_from_ready == -1)
-    {
-      return -1;
-    }
+    delete_thread_from_ready_queue (tid);
     thread_to_block->set_state (BLOCKED);
   }
 
-  block_open (true);
-
+  unblock_signals (true);
   return 0;
-
 }
 
 
@@ -354,21 +370,25 @@ int uthread_block(int tid)
 */
 int uthread_resume(int tid)
 {
-  block_open (false);
+  unblock_signals (false);
 
   if (check_if_thread_exist (tid) == -1)
   {
     ///////////////////////////////////////
+    unblock_signals(true);
     return -1;
   }
   thread* thread_to_resume = search_thread (tid);
-  if(thread_to_resume->get_state() == BLOCKED)
+  if(thread_to_resume->get_state() == BLOCKED )
   {
     thread_to_resume->set_state (READY);
-    ready_queue.push_back (thread_to_resume);
+    if(!thread_to_resume->get_sleep())
+    {
+      ready_queue.push_back (thread_to_resume);
+    }
   }
 
-  block_open (true);
+  unblock_signals (true);
   return 0;
 }
 
@@ -386,7 +406,15 @@ int uthread_resume(int tid)
  *
  * @return On success, return 0. On failure, return -1.
 */
-int uthread_sleep(int num_quantums);
+int uthread_sleep(int num_quantums)
+{
+  unblock_signals (false);
+  running_thread->set_sleep (true);
+  running_thread->set_time_to_sleep (num_quantums);
+  block_handler(false);
+  unblock_signals (true);
+  return 0;
+}
 
 
 
@@ -397,9 +425,9 @@ int uthread_sleep(int num_quantums);
 */
 int uthread_get_tid()
 {
-  block_open (false);
+  unblock_signals (false);
   int id = running_thread->get_id();
-  block_open (true);
+  unblock_signals (true);
   return id;
 }
 
@@ -414,9 +442,9 @@ int uthread_get_tid()
 */
 int uthread_get_total_quantums()
 {
-  block_open (false);
+  unblock_signals (false);
   int q = total_quantum ;
-  block_open (true);
+  unblock_signals (true);
   return q;
 }
 
@@ -432,14 +460,15 @@ int uthread_get_total_quantums()
 */
 int uthread_get_quantums(int tid)
 {
-  block_open (false);
+  unblock_signals (false);
   int exist = check_if_thread_exist (tid);
   if (exist == -1)
   {
+    unblock_signals (true);
     return -1;
   }
   thread *t  = search_thread (tid);
   int q =  t->get_quantum_counter();
-  block_open (true);
+  unblock_signals (true);
   return q;
 }
