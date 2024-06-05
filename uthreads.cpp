@@ -38,7 +38,7 @@ void unblock_signals(bool op)
       if(sigprocmask (SIG_UNBLOCK, &set, nullptr)==-1){
           fprintf (stderr,SYSTEM_ERROR" unblocksignals failed\n");
           thread_cleanup();
-          _exit(1);
+          exit(1);
       }
     }
     else
@@ -46,7 +46,7 @@ void unblock_signals(bool op)
       if(sigprocmask (SIG_BLOCK, &set, nullptr)==-1){
           fprintf (stderr,SYSTEM_ERROR" blocksignals failed\n");
           thread_cleanup();
-          _exit(1);
+          exit(1);
       }
     }
 }
@@ -152,7 +152,7 @@ void block_handler(bool need_to_block)
     if(setitimer(ITIMER_VIRTUAL, &timer, NULL)==-1){
         fprintf (stderr,SYSTEM_ERROR" setitimer failed\n");
         thread_cleanup();
-        _exit(1);
+        exit(1);
     }
     siglongjmp (running_thread->_env, 1);
   }
@@ -179,7 +179,7 @@ void terminate_handler(int tid)
     if(setitimer(ITIMER_VIRTUAL, &timer, NULL)==-1){
         fprintf (stderr,SYSTEM_ERROR" setitimer failed\n");
         thread_cleanup();
-        _exit(1);
+        exit(1);
     }
   siglongjmp(running_thread->_env,1);
 }
@@ -229,19 +229,19 @@ int uthread_init(int quantum_usecs){
   if (sigemptyset(&set) == -1)
   {
       fprintf (stderr,SYSTEM_ERROR" sigemptyset failed\n");
-      _exit(1);
+      exit(1);
 
   }
   if (sigaddset(&set, SIGVTALRM) == -1)
   {
       fprintf (stderr,SYSTEM_ERROR" sigaddset failed\n");
-      _exit(1);
+      exit(1);
   }
 
   sa.sa_handler = &time_handler;
   if (sigaction(SIGVTALRM, &sa, nullptr) < 0) {
       fprintf (stderr,SYSTEM_ERROR" sigaction failed\n");
-      _exit(1);
+      exit(1);
   }
 
   timer.it_value.tv_sec = quantum_usecs / 1000000;
@@ -261,7 +261,7 @@ int uthread_init(int quantum_usecs){
   if (setitimer(ITIMER_VIRTUAL, &timer, NULL))
   {
       fprintf (stderr,SYSTEM_ERROR" setitimer failed\n");
-      _exit(1);
+      exit(1);
   }
   return 0;
 }
