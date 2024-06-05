@@ -28,6 +28,7 @@ void thread_cleanup()
     for (auto it = all_threads.begin(); it != all_threads.end(); ++it) {
         delete (*it);
     }
+    all_threads.clear();
 }
 
 //true = unblock , false = block
@@ -67,7 +68,7 @@ int check_if_thread_exist(int pos)
   {
     std::list<bool>::iterator it = available_id.begin();
     std::advance(it, pos);
-    if (!*it)
+    if (!(*it))
     {
       return -1;
     }
@@ -75,11 +76,12 @@ int check_if_thread_exist(int pos)
   }
 }
 
+//return the first index available for new thread
 int available_index()
 {
   int index = 0;
   for (auto it = available_id.begin(); it != available_id.end(); ++it, ++index) {
-    if (!*it)
+    if (!(*it))
     {
       return index;
     }
@@ -341,12 +343,16 @@ int uthread_terminate(int tid)
   {
     set_id_value (tid, false);
     delete_thread_from_ready_queue (tid);
-    for (auto it = all_threads.begin(); it != all_threads.end(); ++it)
+    for (auto it = all_threads.begin(); it != all_threads.end();)
     {
-      if((*it)->get_id() == tid )
+      if ((*it)->get_id() == tid)
       {
-        all_threads.erase (it);
-        delete *it;
+        delete *it;  // Delete the element pointed to by it
+        it = all_threads.erase(it);  // Erase the element from the list and update the iterator
+      }
+      else
+      {
+        it++;  // Move to the next element
       }
     }
   }
