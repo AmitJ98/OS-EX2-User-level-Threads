@@ -445,6 +445,7 @@ int uthread_sleep(int num_quantums)
   unblock_signals (false);
   running_thread->set_sleep (true);
   running_thread->set_time_to_sleep (num_quantums);
+  running_thread->set_state (READY); //todo CHECK IF NEED TO DO SO
   block_handler(false);
   unblock_signals (true);
   return 0;
