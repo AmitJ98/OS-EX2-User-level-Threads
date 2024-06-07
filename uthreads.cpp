@@ -74,6 +74,7 @@ int check_if_thread_exist(int pos)
     }
     return 0;
   }
+  return -1;
 }
 
 //return the first index available for new thread
@@ -335,6 +336,7 @@ int uthread_terminate(int tid)
     unblock_signals (true);
     _exit (0);
   }
+
   else if (running_thread->get_id() == tid)
   {
     terminate_handler (tid);
@@ -443,8 +445,16 @@ int uthread_resume(int tid)
 int uthread_sleep(int num_quantums)
 {
   unblock_signals (false);
+    if (running_thread->get_id() == 0 ){
+        fprintf (stderr,LIBRARY_ERROR" can't put the main thread to sleep \n");
+        unblock_signals (true);
+        return -1;
+    }
   running_thread->set_sleep (true);
   running_thread->set_time_to_sleep (num_quantums);
+  if (running_thread->get_state() == RUNNING){
+        running_thread->set_state(READY);
+  }
   block_handler(false);
   unblock_signals (true);
   return 0;
