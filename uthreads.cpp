@@ -1,4 +1,3 @@
-#include <iostream>
 #include "uthreads.h"
 #define READY 0
 #define RUNNING 1
@@ -19,40 +18,36 @@ static sigset_t set;
 
 
 
-
-
-
-
 void thread_cleanup()
 {
-    for (auto it = all_threads.begin(); it != all_threads.end(); ++it) {
-        delete (*it);
-    }
-    all_threads.clear();
+  for (auto it = all_threads.begin(); it != all_threads.end(); ++it) {
+    delete (*it);
+  }
+  all_threads.clear();
 }
 
 //true = unblock , false = block
 void unblock_signals(bool op)
 {
-    if (op)
-    {
-      if(sigprocmask (SIG_UNBLOCK, &set, nullptr)==-1){
-          fprintf (stderr,SYSTEM_ERROR" unblocksignals failed\n");
-          thread_cleanup();
-          exit(1);
-      }
+  if (op)
+  {
+    if(sigprocmask (SIG_UNBLOCK, &set, nullptr)==-1){
+      fprintf (stderr,SYSTEM_ERROR" unblock signals failed\n");
+      thread_cleanup();
+      exit(1);
     }
-    else
-    {
-      if(sigprocmask (SIG_BLOCK, &set, nullptr)==-1){
-          fprintf (stderr,SYSTEM_ERROR" blocksignals failed\n");
-          thread_cleanup();
-          exit(1);
-      }
+  }
+  else
+  {
+    if(sigprocmask (SIG_BLOCK, &set, nullptr)==-1){
+      fprintf (stderr,SYSTEM_ERROR" block signals failed\n");
+      thread_cleanup();
+      exit(1);
     }
+  }
 }
 
-void set_id_value(int pos,bool value)
+void set_id_value(long unsigned pos,bool value)
 {
   if (pos < available_id.size())
   {
@@ -62,7 +57,7 @@ void set_id_value(int pos,bool value)
   }
 }
 
-int check_if_thread_exist(int pos)
+int check_if_thread_exist(long unsigned int pos)
 {
   if (pos < available_id.size())
   {
@@ -74,6 +69,7 @@ int check_if_thread_exist(int pos)
     }
     return 0;
   }
+  return -1;
 }
 
 //return the first index available for new thread
@@ -89,8 +85,6 @@ int available_index()
   return -1;
 
 }
-
-
 
 thread* search_thread(int id) {
   for (auto it = all_threads.begin(); it != all_threads.end(); ++it)
@@ -114,7 +108,6 @@ int delete_thread_from_ready_queue(int id)
   return -1;
 }
 
-
 void sleep_check()
 {
   for (auto it = all_threads.begin(); it != all_threads.end(); ++it)
@@ -134,7 +127,6 @@ void sleep_check()
   }
 }
 
-
 void block_handler(bool need_to_block)
 {
   ready_queue.pop_front();
@@ -143,7 +135,7 @@ void block_handler(bool need_to_block)
     running_thread->set_state (BLOCKED);
   }
 
-  thread *next = ready_queue.front ();
+  thread *next = ready_queue.front();
   next->set_state (RUNNING);
 
   if ((sigsetjmp(running_thread->_env, 1)) == 0)
@@ -152,14 +144,13 @@ void block_handler(bool need_to_block)
     total_quantum++;
     running_thread->increace_quantum_counter ();
     if(setitimer(ITIMER_VIRTUAL, &timer, NULL)==-1){
-        fprintf (stderr,SYSTEM_ERROR" setitimer failed\n");
-        thread_cleanup();
-        exit(1);
+      fprintf (stderr,SYSTEM_ERROR" setitimer failed\n");
+      thread_cleanup();
+      exit(1);
     }
     siglongjmp (running_thread->_env, 1);
   }
 }
-
 
 void terminate_handler(int tid)
 {
@@ -178,18 +169,20 @@ void terminate_handler(int tid)
   running_thread->set_state (RUNNING);
   total_quantum++;
   running_thread->increace_quantum_counter();
-    if(setitimer(ITIMER_VIRTUAL, &timer, NULL)==-1){
-        fprintf (stderr,SYSTEM_ERROR" setitimer failed\n");
-        thread_cleanup();
-        exit(1);
-    }
+  if(setitimer(ITIMER_VIRTUAL, &timer, NULL)==-1)
+  {
+    fprintf (stderr,SYSTEM_ERROR" setitimer failed\n");
+    thread_cleanup();
+    exit(1);
+  }
   siglongjmp(running_thread->_env,1);
 }
 
-
 void time_handler(int sig)
 {
-    sleep_check();
+  if(sig == SIGVTALRM)
+  {
+    sleep_check ();
 
     ready_queue.pop_front ();
     ready_queue.push_back (running_thread);
@@ -202,9 +195,10 @@ void time_handler(int sig)
     {
       running_thread = next;
       total_quantum++;
-      running_thread->increace_quantum_counter();
+      running_thread->increace_quantum_counter ();
       siglongjmp (running_thread->_env, 1);
     }
+  }
 }
 
 
@@ -230,20 +224,20 @@ int uthread_init(int quantum_usecs){
 
   if (sigemptyset(&set) == -1)
   {
-      fprintf (stderr,SYSTEM_ERROR" sigemptyset failed\n");
-      exit(1);
+    fprintf (stderr,SYSTEM_ERROR" sigemptyset failed\n");
+    exit(1);
 
   }
   if (sigaddset(&set, SIGVTALRM) == -1)
   {
-      fprintf (stderr,SYSTEM_ERROR" sigaddset failed\n");
-      exit(1);
+    fprintf (stderr,SYSTEM_ERROR" sigaddset failed\n");
+    exit(1);
   }
 
   sa.sa_handler = &time_handler;
   if (sigaction(SIGVTALRM, &sa, nullptr) < 0) {
-      fprintf (stderr,SYSTEM_ERROR" sigaction failed\n");
-      exit(1);
+    fprintf (stderr,SYSTEM_ERROR" sigaction failed\n");
+    exit(1);
   }
 
   timer.it_value.tv_sec = quantum_usecs / 1000000;
@@ -262,8 +256,8 @@ int uthread_init(int quantum_usecs){
 
   if (setitimer(ITIMER_VIRTUAL, &timer, NULL))
   {
-      fprintf (stderr,SYSTEM_ERROR" setitimer failed\n");
-      exit(1);
+    fprintf (stderr,SYSTEM_ERROR" setitimer failed\n");
+    exit(1);
   }
   return 0;
 }
@@ -335,6 +329,7 @@ int uthread_terminate(int tid)
     unblock_signals (true);
     _exit (0);
   }
+
   else if (running_thread->get_id() == tid)
   {
     terminate_handler (tid);
@@ -372,9 +367,9 @@ int uthread_block(int tid)
   unblock_signals (false);
   if (check_if_thread_exist (tid) == -1 || tid == 0)
   {
-      fprintf (stderr,LIBRARY_ERROR" tid don't exist or tid == 0\n");
-      unblock_signals (true);
-      return -1;
+    fprintf (stderr,LIBRARY_ERROR" tid don't exist or tid == 0\n");
+    unblock_signals (true);
+    return -1;
   }
 
   thread* thread_to_block = search_thread (tid);
@@ -443,9 +438,14 @@ int uthread_resume(int tid)
 int uthread_sleep(int num_quantums)
 {
   unblock_signals (false);
+  if (running_thread->get_id() == 0 ){
+    fprintf (stderr,LIBRARY_ERROR" can't put the main thread to sleep \n");
+    unblock_signals (true);
+    return -1;
+  }
   running_thread->set_sleep (true);
-  running_thread->set_time_to_sleep (num_quantums);
-  running_thread->set_state (READY); //todo CHECK IF NEED TO DO SO
+  running_thread->set_time_to_sleep(num_quantums);
+  running_thread->set_state (READY);
   block_handler(false);
   unblock_signals (true);
   return 0;

@@ -1,5 +1,5 @@
 amitjoseph98,Maya.heilbrun
-Amitjoseph (207255050) , MayaHeilbrun(207583410)
+Amitjoseph (207255050) , MayaHeilbrun (207583410)
 EX: 2
 
 FILES:
@@ -17,8 +17,9 @@ REMARKS:
       saved state includes the stack context, the program counter, and optionally, the current signal mask.
       siglongjmp -restores the environment saved by the most recent call of sigsetjmp. It will jump back to the
       point where sigsetjmp was called and continue the code as if sigsetjmp just returned.
+	sigsetjmp returns 0 when it saves the state, If siglongjmp jumps back to this point, sigsetjmp returns a non-zero value.
    b. sigsetjmp and siglongjmp allow a program to save and restore the current signal mask.
-      the sigsetjmp allows you to save it if the savemask is non-zero,and the siglongjmp restores it.
+      the sigsetjmp allows you to save it if the savemask parameter is non-zero value ,and the siglongjmp restores it if sigsetjmp saved it.
 
 2. Example for general use of user-level threads: web browser
 The user-level	threads are a reasonable choice for this because:
