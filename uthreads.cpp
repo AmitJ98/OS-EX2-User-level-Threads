@@ -1,4 +1,10 @@
 #include "uthreads.h"
+#include "thread.h"
+#include "list"
+#include <stdio.h>
+#include <signal.h>
+#include "algorithm"
+
 #define READY 0
 #define RUNNING 1
 #define BLOCKED 2
@@ -327,7 +333,7 @@ int uthread_terminate(int tid)
   {
     thread_cleanup();
     unblock_signals (true);
-    _exit (0);
+    exit (0);
   }
 
   else if (running_thread->get_id() == tid)

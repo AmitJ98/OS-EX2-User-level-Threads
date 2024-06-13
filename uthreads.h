@@ -6,16 +6,6 @@
 #ifndef _UTHREADS_H
 #define _UTHREADS_H
 
-#include "thread.h"
-#include "queue"
-#include "list"
-#include <stdio.h>
-#include <signal.h>
-#include "algorithm"
-
-
-
-
 #define MAX_THREAD_NUM 100 /* maximal number of threads */
 #define STACK_SIZE 4096 /* stack size per thread (in bytes) */
 
