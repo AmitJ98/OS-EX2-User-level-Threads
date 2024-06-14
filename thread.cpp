@@ -70,6 +70,7 @@ thread::thread (int id , thread_entry_point f)
 thread::~thread ()
 {
   delete [] _stack;
+  _stack = nullptr;
 }
 
 int thread::get_id ()const

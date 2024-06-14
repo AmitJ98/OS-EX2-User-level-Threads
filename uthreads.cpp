@@ -28,8 +28,10 @@ void thread_cleanup()
 {
   for (auto it = all_threads.begin(); it != all_threads.end(); ++it) {
     delete (*it);
+    (*it) = nullptr;
   }
   all_threads.clear();
+  ready_queue.clear();
 }
 
 //true = unblock , false = block
@@ -263,6 +265,7 @@ int uthread_init(int quantum_usecs){
   if (setitimer(ITIMER_VIRTUAL, &timer, NULL))
   {
     fprintf (stderr,SYSTEM_ERROR" setitimer failed\n");
+    thread_cleanup();
     exit(1);
   }
   return 0;
@@ -339,6 +342,7 @@ int uthread_terminate(int tid)
   else if (running_thread->get_id() == tid)
   {
     terminate_handler (tid);
+    unblock_signals (true);
   }
   else
   {
@@ -350,12 +354,13 @@ int uthread_terminate(int tid)
       {
         all_threads.erase(it);
         delete *it;
+        *it = nullptr;
         break;
       }
     }
+    unblock_signals (true);
+    return 0;
   }
-  unblock_signals (true);
-  return 0;
 }
 
 
@@ -371,9 +376,16 @@ int uthread_terminate(int tid)
 int uthread_block(int tid)
 {
   unblock_signals (false);
-  if (check_if_thread_exist (tid) == -1 || tid == 0)
+  if (tid == 0|| check_if_thread_exist (tid) == -1 )
   {
-    fprintf (stderr,LIBRARY_ERROR" tid don't exist or tid == 0\n");
+    if(tid == 0)
+    {
+      fprintf (stderr,LIBRARY_ERROR" cant block the main thread (tid = 0)\n");
+    }
+    else
+    {
+      fprintf (stderr,LIBRARY_ERROR" tid don't exist\n");
+    }
     unblock_signals (true);
     return -1;
   }
@@ -407,10 +419,17 @@ int uthread_resume(int tid)
 {
   unblock_signals (false);
 
-  if (check_if_thread_exist (tid) == -1)
+  if (if (tid == 0|| check_if_thread_exist (tid) == -1 ))
   {
-    fprintf (stderr,LIBRARY_ERROR" tid don't exist or tid == 0\n");
-    unblock_signals(true);
+    if(tid == 0)
+    {
+      fprintf (stderr,LIBRARY_ERROR" cant resume the main thread (tid = 0)\n");
+    }
+    else
+    {
+      fprintf (stderr,LIBRARY_ERROR" tid don't exist\n");
+    }
+    unblock_signals (true);
     return -1;
   }
   thread* thread_to_resume = search_thread (tid);
@@ -444,7 +463,8 @@ int uthread_resume(int tid)
 int uthread_sleep(int num_quantums)
 {
   unblock_signals (false);
-  if (running_thread->get_id() == 0 ){
+  if (running_thread->get_id() == 0 )
+  {
     fprintf (stderr,LIBRARY_ERROR" can't put the main thread to sleep \n");
     unblock_signals (true);
     return -1;
