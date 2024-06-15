@@ -183,6 +183,7 @@ void terminate_handler(int tid)
     thread_cleanup();
     exit(1);
   }
+  unblock_signals (true);
   siglongjmp(running_thread->_env,1);
 }
 
@@ -342,7 +343,8 @@ int uthread_terminate(int tid)
   else if (running_thread->get_id() == tid)
   {
     terminate_handler (tid);
-    unblock_signals (true);
+    unblock_signals (true); /// Never gets here (doesnt need to)
+    return 0;
   }
   else
   {
@@ -419,16 +421,9 @@ int uthread_resume(int tid)
 {
   unblock_signals (false);
 
-  if (if (tid == 0|| check_if_thread_exist (tid) == -1 ))
+  if (check_if_thread_exist (tid) == -1 )
   {
-    if(tid == 0)
-    {
-      fprintf (stderr,LIBRARY_ERROR" cant resume the main thread (tid = 0)\n");
-    }
-    else
-    {
-      fprintf (stderr,LIBRARY_ERROR" tid don't exist\n");
-    }
+    fprintf (stderr,LIBRARY_ERROR" tid don't exist\n");
     unblock_signals (true);
     return -1;
   }
