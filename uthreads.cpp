@@ -16,6 +16,8 @@ static std::list<thread*> all_threads;
 static std::list<bool> available_id(MAX_THREAD_NUM, false);
 
 static thread* running_thread = nullptr;
+static thread* thread_to_delete = nullptr;
+static bool d = false;
 static int total_quantum = 0;
 
 static struct sigaction sa;
@@ -158,18 +160,26 @@ void block_handler(bool need_to_block)
     }
     siglongjmp (running_thread->_env, 1);
   }
+  else{
+      if (d)
+      {
+          delete thread_to_delete;
+          d= false;
+      }
+  }
 }
 
 void terminate_handler(int tid)
 {
   set_id_value (tid, false);
+  thread_to_delete =  running_thread;
   ready_queue.pop_front();
   for (auto it = all_threads.begin(); it != all_threads.end(); ++it)
   {
     if((*it)->get_id() == tid )
     {
       all_threads.erase (it);
-      delete *it;
+      d= true;
       break;
     }
   }
@@ -206,6 +216,14 @@ void time_handler(int sig)
       total_quantum++;
       running_thread->increace_quantum_counter ();
       siglongjmp (running_thread->_env, 1);
+    }
+    else
+    {
+      if (d)
+      {
+          delete thread_to_delete;
+          d= false;
+      }
     }
   }
 }
@@ -253,7 +271,6 @@ int uthread_init(int quantum_usecs){
   timer.it_value.tv_usec = quantum_usecs % 1000000;
   timer.it_interval.tv_sec = quantum_usecs / 1000000;
   timer.it_interval.tv_usec = quantum_usecs % 1000000;
-
   set_id_value(0,true);
   thread* main_thread = new thread(0, nullptr);
   main_thread->set_state (RUNNING);
