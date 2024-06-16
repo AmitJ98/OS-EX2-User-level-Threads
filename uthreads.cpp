@@ -160,12 +160,15 @@ void block_handler(bool need_to_block)
     }
     siglongjmp (running_thread->_env, 1);
   }
-  else{
-      if (d)
-      {
-          delete thread_to_delete;
-          d= false;
-      }
+  else
+  {
+    if (d)
+    {
+      delete thread_to_delete;
+      thread_to_delete = nullptr;
+      d= false;
+    }
+    unblock_signals(true);
   }
 }
 
@@ -193,7 +196,6 @@ void terminate_handler(int tid)
     thread_cleanup();
     exit(1);
   }
-  unblock_signals (true);
   siglongjmp(running_thread->_env,1);
 }
 
@@ -221,9 +223,11 @@ void time_handler(int sig)
     {
       if (d)
       {
-          delete thread_to_delete;
-          d= false;
+        delete thread_to_delete;
+        thread_to_delete = nullptr;
+        d = false;
       }
+      unblock_signals(true);
     }
   }
 }
@@ -360,7 +364,8 @@ int uthread_terminate(int tid)
   else if (running_thread->get_id() == tid)
   {
     terminate_handler (tid);
-    unblock_signals (true); /// Never gets here (doesnt need to)
+    /// THE CODE NEVER GETS HERE BECUASE IT TERMINATE ITSELF BUT COMPILATION NEED RETURN
+    unblock_signals (true); 
     return 0;
   }
   else
@@ -414,7 +419,6 @@ int uthread_block(int tid)
   {
     block_handler(true);
   }
-
   else if(thread_to_block->get_state() == READY)
   {
     delete_thread_from_ready_queue (tid);

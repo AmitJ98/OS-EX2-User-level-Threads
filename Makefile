@@ -29,4 +29,4 @@ tar:
 
 .PHONY: clean
 clean:
-	rm -f $(OBJS) $(TARGET) $(TARNAME)
+	rm -f $(OBJS) $(TARGET) 
